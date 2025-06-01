@@ -1,48 +1,9 @@
-// import React, { useEffect, useState } from 'react';
-// import { View, Text, StyleSheet } from 'react-native';
-// import { useLocalSearchParams } from 'expo-router';
-// import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// export default function ExpenseDetail() {
-//   const { expenseId } = useLocalSearchParams();
-//   const [expense, setExpense] = useState(null);
-
-//   useEffect(() => {
-//     const fetchExpense = async () => {
-//       const stored = await AsyncStorage.getItem('expenses');
-//       const expenses = stored ? JSON.parse(stored) : [];
-//       const found = expenses.find((e) => e.id === expenseId);
-//       setExpense(found);
-//     };
-//     fetchExpense();
-//   }, [expenseId]);
-
-//   if (!expense) return <Text style={styles.loading}>Loading...</Text>;
-
-//   return (
-//     <View style={styles.container}>
-//       <Text style={styles.title}>Expense Details</Text>
-//       <Text style={styles.text}>Description: {expense.description}</Text>
-//       <Text style={styles.text}>Amount: ₹{expense.amount}</Text>
-//       <Text style={styles.text}>ID: {expense.id}</Text>
-//     </View>
-//   );
-// }
-
-// const styles = StyleSheet.create({
-//   container: { flex: 1, padding: 20, justifyContent: 'center' },
-//   title: { fontSize: 22, marginBottom: 20, textAlign: 'center' },
-//   text: { fontSize: 18, marginBottom: 10 },
-//   loading: { fontSize: 18, textAlign: 'center', marginTop: 40 },
-// });
-
-
-
-
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Button, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Colors from './constants/Colors';
+import CommonStyles from './constants/CommonStyles';
 
 export default function EntryDetail() {
   const { entryId } = useLocalSearchParams();
@@ -58,41 +19,66 @@ export default function EntryDetail() {
         const entries = stored && stored !== 'undefined' ? JSON.parse(stored) : [];
         if (!Array.isArray(entries)) throw new Error('Invalid data format');
         const found = entries.find((e) => e.id === entryId);
-        setEntry(found || null);
+        if (!found) {
+          Alert.alert('Error', 'Entry not found');
+          router.back();
+          return;
+        }
+        setEntry(found);
       } catch (error) {
         Alert.alert('Error', 'Failed to load entry');
         console.error('Fetch entry error:', error);
+        router.back();
       } finally {
         setLoading(false);
       }
     };
     fetchEntry();
-  }, [entryId]);
+  }, [entryId, router]);
 
   const handleDelete = async () => {
-    try {
-      const stored = await AsyncStorage.getItem('entries');
-      let entries = stored && stored !== 'undefined' ? JSON.parse(stored) : [];
-      if (!Array.isArray(entries)) entries = [];
+    Alert.alert(
+      'Confirm Delete',
+      'Are you sure you want to delete this entry?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const stored = await AsyncStorage.getItem('entries');
+              let entries = stored && stored !== 'undefined' ? JSON.parse(stored) : [];
+              if (!Array.isArray(entries)) entries = [];
 
-      const entryToDelete = entries.find((e) => e.id === entryId);
-      if (!entryToDelete) return;
+              const entryToDelete = entries.find((e) => e.id === entryId);
+              if (!entryToDelete) {
+                Alert.alert('Error', 'Entry not found');
+                return;
+              }
 
-      entries = entries.filter((e) => e.id !== entryId);
-      await AsyncStorage.setItem('entries', JSON.stringify(entries));
+              entries = entries.filter((e) => e.id !== entryId);
+              await AsyncStorage.setItem('entries', JSON.stringify(entries));
 
-      if (entryToDelete.isIncome) {
-        const storedIncome = await AsyncStorage.getItem('income');
-        const currentIncome = storedIncome ? parseFloat(storedIncome) : 0;
-        await AsyncStorage.setItem('income', (currentIncome - entryToDelete.amount).toString());
-      }
+              if (entryToDelete.isIncome) {
+                const storedIncome = await AsyncStorage.getItem('income');
+                const currentIncome = storedIncome ? parseFloat(storedIncome) : 0;
+                await AsyncStorage.setItem('income', (currentIncome - entryToDelete.amount).toString());
+              }
 
-      Alert.alert('Success', 'Entry deleted');
-      router.replace('/');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to delete entry');
-      console.error('Delete entry error:', error);
-    }
+              Alert.alert('Success', 'Entry deleted');
+              router.replace('/');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete entry');
+              console.error('Delete entry error:', error);
+            }
+          }
+        }
+      ]
+    );
   };
 
   if (loading) return <Text style={styles.loading}>Loading...</Text>;
@@ -101,28 +87,129 @@ export default function EntryDetail() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Entry Details</Text>
-      <Text style={styles.text}>Type: {entry.isIncome ? 'Income' : 'Expense'}</Text>
-      <Text style={styles.text}>Description: {entry.description}</Text>
-      <Text style={styles.text}>Amount: ₹{entry.amount.toFixed(2)}</Text>
-      <Text style={styles.text}>Date: {new Date(entry.date).toLocaleDateString()}</Text>
-      <Text style={styles.text}>ID: {entry.id}</Text>
+
+      <View style={[styles.detailCard, { borderLeftColor: entry.isIncome ? Colors.success : Colors.error }]}>
+        <View style={styles.amountContainer}>
+          <Text style={[styles.amount, { color: entry.isIncome ? Colors.success : Colors.error }]}>
+            {entry.isIncome ? '+' : '-'}₹{entry.amount.toFixed(2)}
+          </Text>
+          <Text style={styles.type}>{entry.isIncome ? 'Income' : 'Expense'}</Text>
+        </View>
+
+        <View style={styles.detailRow}>
+          <Text style={styles.label}>Description</Text>
+          <Text style={styles.value}>{entry.description}</Text>
+        </View>
+
+        <View style={styles.detailRow}>
+          <Text style={styles.label}>Date</Text>
+          <Text style={styles.value}>{new Date(entry.date).toLocaleDateString()}</Text>
+        </View>
+      </View>
+
       <View style={styles.buttonContainer}>
-        <Button
-          title="Edit"
+        <TouchableOpacity
+          style={[styles.button, styles.editButton]}
           onPress={() => router.push({ pathname: '/add-entry', params: { entryId } })}
-        />
-        <Button title="Delete" color="red" onPress={handleDelete} />
-        <Button title="Back" color="gray" onPress={() => router.back()} />
+        >
+          <Text style={styles.buttonText}>Edit</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.button, styles.deleteButton]}
+          onPress={handleDelete}
+        >
+          <Text style={styles.buttonText}>Delete</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.button, styles.backButton]}
+          onPress={() => router.back()}
+        >
+          <Text style={[styles.buttonText, styles.backButtonText]}>Back</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, justifyContent: 'center' },
-  title: { fontSize: 22, marginBottom: 20, textAlign: 'center' },
-  text: { fontSize: 18, marginBottom: 10 },
-  loading: { fontSize: 18, textAlign: 'center', marginTop: 40 },
-  error: { fontSize: 18, textAlign: 'center', marginTop: 40, color: 'red' },
-  buttonContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 },
+  container: {
+    ...CommonStyles.container,
+    paddingTop: 48,
+  },
+  title: {
+    ...CommonStyles.title,
+  },
+  detailCard: {
+    ...CommonStyles.card,
+    borderLeftWidth: 4,
+    marginVertical: 24,
+  },
+  amountContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+    paddingBottom: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  amount: {
+    fontSize: 36,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  type: {
+    fontSize: 18,
+    color: Colors.secondary,
+  },
+  detailRow: {
+    marginBottom: 16,
+  },
+  label: {
+    ...CommonStyles.label,
+    marginBottom: 4,
+  },
+  value: {
+    fontSize: 18,
+    color: Colors.text,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 24,
+  },
+  button: {
+    ...CommonStyles.button,
+    flex: 1,
+    marginHorizontal: 8,
+  },
+  editButton: {
+    backgroundColor: Colors.accent,
+  },
+  deleteButton: {
+    backgroundColor: Colors.error,
+  },
+  backButton: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  buttonText: {
+    ...CommonStyles.buttonText,
+  },
+  backButtonText: {
+    color: Colors.text,
+  },
+  loading: {
+    fontSize: 18,
+    textAlign: 'center',
+    marginTop: 40,
+    color: Colors.secondary,
+  },
+  error: {
+    fontSize: 18,
+    textAlign: 'center',
+    marginTop: 40,
+    color: Colors.error,
+  },
 });

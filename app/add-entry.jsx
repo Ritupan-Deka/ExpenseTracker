@@ -1,88 +1,19 @@
-// import React, { useState } from 'react';
-// import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
-// import { useRouter } from 'expo-router';
-// import AsyncStorage from '@react-native-async-storage/async-storage';
-// import { v4 as uuidv4 } from 'uuid'; // Optional: For unique ID
-
-// export default function AddExpenseScreen() {
-//   const [amount, setAmount] = useState('');
-//   const [description, setDescription] = useState('');
-//   const router = useRouter();
-
-//   const handleSave = async () => {
-//     if (!amount || !description) {
-//       Alert.alert('Please fill all fields');
-//       return;
-//     }
-
-//     const newExpense = {
-//       id: Date.now().toString(), // or use uuidv4()
-//       amount: parseFloat(amount),
-//       description,
-//     };
-
-//     const stored = await AsyncStorage.getItem('expenses');
-//     const expenses = stored ? JSON.parse(stored) : [];
-
-//     expenses.push(newExpense);
-//     await AsyncStorage.setItem('expenses', JSON.stringify(expenses));
-
-//     Alert.alert('Saved!', 'Expense added successfully');
-//     router.replace('/');
-//   };
-
-//   return (
-//     <View style={styles.container}>
-//       <Text style={styles.title}>Add New Expense</Text>
-
-//       <TextInput
-//         placeholder="Amount"
-//         keyboardType="numeric"
-//         value={amount}
-//         onChangeText={setAmount}
-//         style={styles.input}
-//       />
-//       <TextInput
-//         placeholder="Description"
-//         value={description}
-//         onChangeText={setDescription}
-//         style={styles.input}
-//       />
-
-//       <Button title="Save Expense" onPress={handleSave} />
-//     </View>
-//   );
-// }
-
-// const styles = StyleSheet.create({
-//   container: { flex: 1, padding: 20, justifyContent: 'center' },
-//   title: { fontSize: 22, marginBottom: 20, textAlign: 'center' },
-//   input: {
-//     borderWidth: 1,
-//     borderColor: '#ccc',
-//     marginBottom: 15,
-//     padding: 10,
-//     borderRadius: 5,
-//   },
-// });
-
-
-
-
+import 'react-native-get-random-values';
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert, Switch } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import DatePicker from '@react-native-community/datetimepicker'; 
-// import DateTimePicker from '@react-native-community/datetimepicker';
-
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { v4 as uuidv4 } from 'uuid';
+import Colors from './constants/Colors';
+import CommonStyles from './constants/CommonStyles';
 
 export default function AddEntryScreen() {
   const { entryId } = useLocalSearchParams();
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
-  // const [date, setDate] = useState(new Date());
+  const [date, setDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [isIncome, setIsIncome] = useState(false);
   const [isEditing, setIsEditing] = useState(!!entryId);
   const router = useRouter();
@@ -98,7 +29,7 @@ export default function AddEntryScreen() {
           if (entry) {
             setAmount(entry.amount.toString());
             setDescription(entry.description);
-            // setDate(new Date(entry.date));
+            setDate(new Date(entry.date || Date.now()));
             setIsIncome(entry.isIncome);
           } else {
             Alert.alert('Error', 'Entry not found');
@@ -115,8 +46,12 @@ export default function AddEntryScreen() {
 
   const handleSave = async () => {
     const parsedAmount = parseFloat(amount);
-    if (!description.trim() || !amount || isNaN(parsedAmount) || parsedAmount <= 0) {
-      Alert.alert('Error', 'Please enter a valid amount and description');
+    if (!description.trim()) {
+      Alert.alert('Error', 'Please enter a description');
+      return;
+    }
+    if (!amount || isNaN(parsedAmount) || parsedAmount <= 0) {
+      Alert.alert('Error', 'Please enter a valid amount');
       return;
     }
 
@@ -125,8 +60,9 @@ export default function AddEntryScreen() {
         id: isEditing ? entryId : uuidv4(),
         amount: parsedAmount,
         description: description.trim(),
-        // date: date.toISOString().split('T')[0],
+        date: date.toISOString(),
         isIncome,
+        createdAt: Date.now(),
       };
 
       const storedEntries = await AsyncStorage.getItem('entries');
@@ -134,14 +70,21 @@ export default function AddEntryScreen() {
       if (!Array.isArray(entries)) entries = [];
 
       if (isEditing) {
+        const oldEntry = entries.find(e => e.id === entryId);
+        if (oldEntry && oldEntry.isIncome) {
+          const storedIncome = await AsyncStorage.getItem('income');
+          const currentIncome = storedIncome ? parseFloat(storedIncome) : 0;
+          await AsyncStorage.setItem('income', (currentIncome - oldEntry.amount).toString());
+        }
         entries = entries.map((e) => (e.id === entryId ? newEntry : e));
       } else {
         entries.push(newEntry);
-        if (isIncome) {
-          const storedIncome = await AsyncStorage.getItem('income');
-          const currentIncome = storedIncome ? parseFloat(storedIncome) : 0;
-          await AsyncStorage.setItem('income', (currentIncome + parsedAmount).toString());
-        }
+      }
+
+      if (isIncome) {
+        const storedIncome = await AsyncStorage.getItem('income');
+        const currentIncome = storedIncome ? parseFloat(storedIncome) : 0;
+        await AsyncStorage.setItem('income', (currentIncome + parsedAmount).toString());
       }
 
       await AsyncStorage.setItem('entries', JSON.stringify(entries));
@@ -153,63 +96,154 @@ export default function AddEntryScreen() {
     }
   };
 
+  const onDateChange = (event, selectedDate) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setDate(selectedDate);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{isEditing ? 'Edit Entry' : 'Add New Entry'}</Text>
 
-      <View style={styles.toggleContainer}>
-        <Text style={styles.label}>Type: {isIncome ? 'Income' : 'Expense'}</Text>
-        <Switch
-          value={isIncome}
-          onValueChange={setIsIncome}
-          accessibilityLabel="Toggle between expense and income"
-        />
+      <View style={styles.typeContainer}>
+        <TouchableOpacity
+          style={[styles.typeButton, !isIncome && styles.typeButtonActive]}
+          onPress={() => setIsIncome(false)}
+        >
+          <Text style={[
+            styles.typeButtonText,
+            !isIncome && styles.typeButtonTextActive
+          ]}>Expense</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.typeButton, isIncome && styles.typeButtonActive]}
+          onPress={() => setIsIncome(true)}
+        >
+          <Text style={[
+            styles.typeButtonText,
+            isIncome && styles.typeButtonTextActive
+          ]}>Income</Text>
+        </TouchableOpacity>
       </View>
 
+      <Text style={styles.label}>Amount</Text>
       <TextInput
-        placeholder="Amount"
+        placeholder="Enter amount"
         keyboardType="numeric"
         value={amount}
         onChangeText={setAmount}
         style={styles.input}
         accessibilityLabel="Entry amount"
       />
+
+      <Text style={styles.label}>Description</Text>
       <TextInput
-        placeholder="Description"
+        placeholder="Enter description"
         value={description}
         onChangeText={setDescription}
         style={styles.input}
         accessibilityLabel="Entry description"
       />
-      {/* <Text style={styles.label}>Date</Text>
-      <DatePicker
-        date={date}
-        onDateChange={setDate}
-        mode="date"
-        style={styles.datePicker}
-        accessibilityLabel="Select entry date"
-      /> */}
+
+      <Text style={styles.label}>Date</Text>
+      <TouchableOpacity
+        style={styles.dateButton}
+        onPress={() => setShowDatePicker(true)}
+      >
+        <Text style={styles.dateText}>{date.toLocaleDateString()}</Text>
+      </TouchableOpacity>
+
+      {showDatePicker && (
+        <DateTimePicker
+          value={date}
+          mode="date"
+          display="default"
+          onChange={onDateChange}
+          maximumDate={new Date()}
+        />
+      )}
 
       <View style={styles.buttonContainer}>
-        <Button title={isEditing ? 'Update Entry' : 'Save Entry'} onPress={handleSave} />
-        <Button title="Cancel" color="gray" onPress={() => router.back()} />
+        <TouchableOpacity
+          style={[styles.button, styles.cancelButton]}
+          onPress={() => router.back()}
+        >
+          <Text style={[styles.typeButtonText, styles.cancelButtonText]}>Cancel</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handleSave}
+        >
+          <Text style={styles.typeButtonTextActive}>{isEditing ? 'Update' : 'Save'}</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, justifyContent: 'center' },
-  title: { fontSize: 22, marginBottom: 20, textAlign: 'center' },
-  label: { fontSize: 16, marginBottom: 10 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    marginBottom: 15,
-    padding: 10,
-    borderRadius: 5,
+  container: {
+    ...CommonStyles.container,
+    paddingTop: 48,
   },
-  toggleContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  // datePicker: { alignSelf: 'center', marginBottom: 15 },
-  buttonContainer: { flexDirection: 'row', justifyContent: 'space-between' },
+  title: {
+    ...CommonStyles.title,
+  },
+  typeContainer: {
+    flexDirection: 'row',
+    marginBottom: 24,
+    backgroundColor: Colors.surface,
+    borderRadius: 8,
+    padding: 4,
+  },
+  typeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 6,
+  },
+  typeButtonActive: {
+    backgroundColor: Colors.accent,
+  },
+  typeButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  typeButtonTextActive: {
+    color: Colors.background,
+  },
+  input: {
+    ...CommonStyles.input,
+  },
+  label: {
+    ...CommonStyles.label,
+  },
+  dateButton: {
+    ...CommonStyles.input,
+    justifyContent: 'center',
+  },
+  dateText: {
+    fontSize: 16,
+    color: Colors.text,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 24,
+  },
+  button: {
+    ...CommonStyles.button,
+    flex: 1,
+    marginHorizontal: 8,
+  },
+  cancelButton: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  cancelButtonText: {
+    color: Colors.text,
+  }
 });
