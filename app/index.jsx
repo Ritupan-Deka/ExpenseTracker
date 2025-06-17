@@ -1,16 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, RefreshControl } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { Link } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from './constants/Colors';
 import CommonStyles from './constants/CommonStyles';
+import SuccessToast from './components/SuccessToast';
 
 export default function HomeScreen() {
   const [entries, setEntries] = useState([]);
   const [income, setIncome] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
   const isFocused = useIsFocused();
 
   const loadData = async () => {
@@ -33,7 +36,8 @@ export default function HomeScreen() {
         setEntries(sortedEntries);
       } else {
         setEntries([]);
-        Alert.alert('Error', 'Invalid data format in storage');
+        setToastMessage('Invalid data format in storage');
+        setToastVisible(true);
       }
 
       const parsedIncome = storedIncome ? parseFloat(storedIncome) : 0;
@@ -44,7 +48,8 @@ export default function HomeScreen() {
         setIncome(parsedIncome);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to load data');
+      setToastMessage('Failed to load data');
+      setToastVisible(true);
       console.error('Load data error:', error);
     } finally {
       setLoading(false);
@@ -78,6 +83,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      <SuccessToast visible={toastVisible} message={toastMessage} onHide={() => setToastVisible(false)} />
       <Text style={styles.title}>Expense Tracker</Text>
       <View style={styles.summary}>
         <Text style={[styles.balanceAmount, { color: balance >= 0 ? Colors.success : Colors.error }]}>

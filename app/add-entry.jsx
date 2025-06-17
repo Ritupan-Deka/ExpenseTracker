@@ -1,12 +1,13 @@
 import 'react-native-get-random-values';
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { v4 as uuidv4 } from 'uuid';
 import Colors from './constants/Colors';
 import CommonStyles from './constants/CommonStyles';
+import SuccessToast from './components/SuccessToast';
 
 export default function AddEntryScreen() {
   const { entryId } = useLocalSearchParams();
@@ -16,6 +17,8 @@ export default function AddEntryScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isIncome, setIsIncome] = useState(false);
   const [isEditing, setIsEditing] = useState(!!entryId);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
   const router = useRouter();
 
   useEffect(() => {
@@ -32,11 +35,13 @@ export default function AddEntryScreen() {
             setDate(new Date(entry.date || Date.now()));
             setIsIncome(entry.isIncome);
           } else {
-            Alert.alert('Error', 'Entry not found');
+            setToastMessage('Entry not found');
+            setToastVisible(true);
             router.back();
           }
         } catch (error) {
-          Alert.alert('Error', 'Failed to load entry');
+          setToastMessage('Failed to load entry');
+          setToastVisible(true);
           console.error('Load entry error:', error);
         }
       };
@@ -47,14 +52,15 @@ export default function AddEntryScreen() {
   const handleSave = async () => {
     const parsedAmount = parseFloat(amount);
     if (!description.trim()) {
-      Alert.alert('Error', 'Please enter a description');
+      setToastMessage('Please enter a description');
+      setToastVisible(true);
       return;
     }
     if (!amount || isNaN(parsedAmount) || parsedAmount <= 0) {
-      Alert.alert('Error', 'Please enter a valid amount');
+      setToastMessage('Please enter a valid amount');
+      setToastVisible(true);
       return;
     }
-
     try {
       const newEntry = {
         id: isEditing ? entryId : uuidv4(),
@@ -88,10 +94,15 @@ export default function AddEntryScreen() {
       }
 
       await AsyncStorage.setItem('entries', JSON.stringify(entries));
-      Alert.alert('Success', isEditing ? 'Entry updated' : 'Entry added');
-      router.replace('/');
+      setToastMessage(isEditing ? 'Entry updated!' : 'Entry added!');
+      setToastVisible(true);
+      setTimeout(() => {
+        setToastVisible(false);
+        router.replace('/');
+      }, 1800);
     } catch (error) {
-      Alert.alert('Error', 'Failed to save entry');
+      setToastMessage('Failed to save entry');
+      setToastVisible(true);
       console.error('Save entry error:', error);
     }
   };
@@ -105,6 +116,7 @@ export default function AddEntryScreen() {
 
   return (
     <View style={styles.container}>
+      <SuccessToast visible={toastVisible} message={toastMessage} onHide={() => setToastVisible(false)} />
       <Text style={styles.title}>{isEditing ? 'Edit Entry' : 'Add New Entry'}</Text>
 
       <View style={styles.typeContainer}>

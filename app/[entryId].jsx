@@ -1,14 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from './constants/Colors';
 import CommonStyles from './constants/CommonStyles';
+import SuccessToast from './components/SuccessToast';
+import ConfirmDialog from './components/ConfirmDialog';
 
 export default function EntryDetail() {
   const { entryId } = useLocalSearchParams();
   const [entry, setEntry] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [confirmVisible, setConfirmVisible] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -20,13 +25,15 @@ export default function EntryDetail() {
         if (!Array.isArray(entries)) throw new Error('Invalid data format');
         const found = entries.find((e) => e.id === entryId);
         if (!found) {
-          Alert.alert('Error', 'Entry not found');
+          setToastMessage('Entry not found');
+          setToastVisible(true);
           router.back();
           return;
         }
         setEntry(found);
       } catch (error) {
-        Alert.alert('Error', 'Failed to load entry');
+        setToastMessage('Failed to load entry');
+        setToastVisible(true);
         console.error('Fetch entry error:', error);
         router.back();
       } finally {
@@ -37,48 +44,45 @@ export default function EntryDetail() {
   }, [entryId, router]);
 
   const handleDelete = async () => {
-    Alert.alert(
-      'Confirm Delete',
-      'Are you sure you want to delete this entry?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const stored = await AsyncStorage.getItem('entries');
-              let entries = stored && stored !== 'undefined' ? JSON.parse(stored) : [];
-              if (!Array.isArray(entries)) entries = [];
+    setConfirmVisible(true);
+  };
 
-              const entryToDelete = entries.find((e) => e.id === entryId);
-              if (!entryToDelete) {
-                Alert.alert('Error', 'Entry not found');
-                return;
-              }
+  const confirmDelete = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('entries');
+      let entries = stored && stored !== 'undefined' ? JSON.parse(stored) : [];
+      if (!Array.isArray(entries)) entries = [];
 
-              entries = entries.filter((e) => e.id !== entryId);
-              await AsyncStorage.setItem('entries', JSON.stringify(entries));
+      const entryToDelete = entries.find((e) => e.id === entryId);
+      if (!entryToDelete) {
+        setToastMessage('Entry not found');
+        setToastVisible(true);
+        setConfirmVisible(false);
+        return;
+      }
 
-              if (entryToDelete.isIncome) {
-                const storedIncome = await AsyncStorage.getItem('income');
-                const currentIncome = storedIncome ? parseFloat(storedIncome) : 0;
-                await AsyncStorage.setItem('income', (currentIncome - entryToDelete.amount).toString());
-              }
+      entries = entries.filter((e) => e.id !== entryId);
+      await AsyncStorage.setItem('entries', JSON.stringify(entries));
 
-              Alert.alert('Success', 'Entry deleted');
-              router.replace('/');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete entry');
-              console.error('Delete entry error:', error);
-            }
-          }
-        }
-      ]
-    );
+      if (entryToDelete.isIncome) {
+        const storedIncome = await AsyncStorage.getItem('income');
+        const currentIncome = storedIncome ? parseFloat(storedIncome) : 0;
+        await AsyncStorage.setItem('income', (currentIncome - entryToDelete.amount).toString());
+      }
+
+      setToastMessage('Entry deleted!');
+      setToastVisible(true);
+      setConfirmVisible(false);
+      setTimeout(() => {
+        setToastVisible(false);
+        router.replace('/');
+      }, 1800);
+    } catch (error) {
+      setToastMessage('Failed to delete entry');
+      setToastVisible(true);
+      setConfirmVisible(false);
+      console.error('Delete entry error:', error);
+    }
   };
 
   if (loading) return <Text style={styles.loading}>Loading...</Text>;
@@ -86,24 +90,29 @@ export default function EntryDetail() {
 
   return (
     <View style={styles.container}>
+      <SuccessToast visible={toastVisible} message={toastMessage} onHide={() => setToastVisible(false)} />
+      <ConfirmDialog
+        visible={confirmVisible}
+        message="Are you sure you want to delete this entry?"
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmVisible(false)}
+      />
       <Text style={styles.title}>Entry Details</Text>
 
       <View style={[styles.detailCard, { borderLeftColor: entry.isIncome ? Colors.success : Colors.error }]}>
-        <View style={styles.amountContainer}>
-          <Text style={[styles.amount, { color: entry.isIncome ? Colors.success : Colors.error }]}>
-            {entry.isIncome ? '+' : '-'}₹{entry.amount.toFixed(2)}
-          </Text>
-          <Text style={styles.type}>{entry.isIncome ? 'Income' : 'Expense'}</Text>
-        </View>
-
-        <View style={styles.detailRow}>
-          <Text style={styles.label}>Description</Text>
-          <Text style={styles.value}>{entry.description}</Text>
-        </View>
-
-        <View style={styles.detailRow}>
-          <Text style={styles.label}>Date</Text>
-          <Text style={styles.value}>{new Date(entry.date).toLocaleDateString()}</Text>
+        <View style={styles.detailRowAmount}>
+          <View>
+            <Text style={styles.label}>Description</Text>
+            <Text style={styles.value}>{entry.description}</Text>
+            <Text style={styles.label}>Date</Text>
+            <Text style={styles.value}>{new Date(entry.date).toLocaleDateString()}</Text>
+            <Text style={styles.type}>{entry.isIncome ? 'Income' : 'Expense'}</Text>
+          </View>
+          <View style={styles.amountRightContainer}>
+            <Text style={[styles.amount, { color: entry.isIncome ? Colors.success : Colors.error }]}>
+              {entry.isIncome ? '+' : '-'}₹{entry.amount.toFixed(2)}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -144,7 +153,24 @@ const styles = StyleSheet.create({
   detailCard: {
     ...CommonStyles.card,
     borderLeftWidth: 4,
-    marginVertical: 24,
+    marginVertical: 0,
+    width: '100%',
+    alignSelf: 'center',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    minHeight: 0,
+  },
+  detailRowAmount: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    width: '100%',
+    padding: 16,
+  },
+  amountRightContainer: {
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+    minWidth: 100,
   },
   amountContainer: {
     alignItems: 'center',
